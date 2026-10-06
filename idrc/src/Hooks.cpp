@@ -606,7 +606,7 @@ log::warn("{}: wayPointBase null=? wayPointCount: {}", __FUNCTION__, wayPointCou
 
 		IDRC::EuropiaBridge::NoteStage(5);
 		float targetPitch = 0.0f;
-		if(IDRC::CameraLockManager::GetSingleton().IsEnabled() && !flyingModeManager.CheckForHeightChange()) {
+		if(false && IDRC::CameraLockManager::GetSingleton().IsEnabled() && !flyingModeManager.CheckForHeightChange()) {  // Europia: height only from U (up) / H (down), never from camera pitch
 			targetPitch = _ts_SKSEFunctions::GetPitch(dragonCameraState->rotation);
 		} else {
 			targetPitch = flyingModeManager.GetTargetPitch();
@@ -706,6 +706,20 @@ log::warn("{}: wayPointBase null=? wayPointCount: {}", __FUNCTION__, wayPointCou
 			waypointToUpdate.y = dragonPos.y + distanceToUpdate * cosYaw;
 
 			float landZ = _ts_SKSEFunctions::GetLandHeightWithWater(waypointToUpdate, true) + minHeightAboveGround;
+			// Europia: IDRC's land lookup failed under multiplayer (he flew under the ground). Also use the worldspace max height.
+			{
+				float europiaGround = 0.0f;
+				auto* europiaTes = RE::TES::GetSingleton();
+				auto* europiaWs = europiaTes ? europiaTes->GetRuntimeData2().worldSpace : nullptr;
+				if (europiaWs && europiaWs->GetMaxHeightAt(waypointToUpdate, europiaGround)) {
+					landZ = std::max(landZ, europiaGround + 900.0f);
+				}
+				float europiaHere = 0.0f;
+				RE::NiPoint3 europiaPos = dragonPos;
+				if (europiaWs && europiaWs->GetMaxHeightAt(europiaPos, europiaHere)) {
+					landZ = std::max(landZ, europiaHere + 900.0f);
+				}
+			}
 			// Europia: altitude ceiling ~6000 units (about 85 m) above the ground so he can't climb away forever
 			waypointToUpdate.z = std::min(std::max(cameraZ, landZ), landZ + 6000.0f);
 		}

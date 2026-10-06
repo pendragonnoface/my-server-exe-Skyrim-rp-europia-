@@ -184,7 +184,7 @@ namespace IDRC::EuropiaBridge {
 
             FlyingModeManager::GetSingleton().SetFlyingModeFromPapyrus(3);  // landed
             bool reg = ControlsManager::GetSingleton().RegisterForControls(false, false);
-            log::info("EuropiaBridge: controls registered = {} (W take off, mouse steer, U up, H down, S slow/land)", reg);
+            log::info("EuropiaBridge: controls registered = {} (W take off, mouse steer left/right, U up, H down, S slow/land)", reg);
         }
 
         void End() {
@@ -258,10 +258,10 @@ namespace IDRC::EuropiaBridge {
             }
             if (ground < -1.0e8f) return;
             bool airborne = (fs == 1 || fs == 2 || fs == 3);  // taking off, cruising, hovering (not landing/landed/perching)
-            if (airborne && pos.z < ground + 150.0f && a_now - s_lastLift > std::chrono::milliseconds(750)) {
+            if (airborne && pos.z < ground + 350.0f && a_now - s_lastLift > std::chrono::milliseconds(400)) {
                 s_lastLift = a_now;
                 log::warn("EuropiaBridge: dragon too low (z={:.0f}, ground={:.0f}, state={}) - lifting him clear", pos.z, ground, fs);
-                d->SetPosition(RE::NiPoint3(pos.x, pos.y, ground + 600.0f), true);
+                d->SetPosition(RE::NiPoint3(pos.x, pos.y, ground + 1000.0f), true);
             }
         }
     }
