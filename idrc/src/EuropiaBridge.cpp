@@ -246,7 +246,7 @@ namespace IDRC::EuropiaBridge {
             if (airborne && pos.z < ground + 150.0f && a_now - s_lastLift > std::chrono::milliseconds(750)) {
                 s_lastLift = a_now;
                 log::warn("EuropiaBridge: dragon too low (z={:.0f}, ground={:.0f}, state={}) - lifting him clear", pos.z, ground, fs);
-                d->SetPosition(RE::NiPoint3(pos.x, pos.y, ground + 600.0f));
+                d->SetPosition(RE::NiPoint3(pos.x, pos.y, ground + 600.0f), true);
             }
         }
     }
