@@ -28,6 +28,12 @@ jobs:
           git -C C:/deps/clibutil checkout 5f845f38089c7ee92f01c000de420570b8cfee0c
           git clone https://github.com/staalo18/TS_SKSEFunctions "$env:GITHUB_WORKSPACE/TS_SKSEFunctions-main"
           git -C "$env:GITHUB_WORKSPACE/TS_SKSEFunctions-main" checkout 1391a1c481baa9e11e0380b7a846f7a42eea0a07
+          # Europia: SetLookAt/ClearLookAt crashed when the dragon has no AI process (multiplayer) - null-guard it
+          $t = "$env:GITHUB_WORKSPACE/TS_SKSEFunctions-main/src/_ts_SKSEFunctions.cpp"
+          $c = (Get-Content $t -Raw)
+          $c = $c.Replace('auto* high = a_actor->GetActorRuntimeData().currentProcess->high;', 'auto* europiaProc = a_actor->GetActorRuntimeData().currentProcess; auto* high = europiaProc ? europiaProc->high : nullptr;')
+          Set-Content $t $c -NoNewline
+          if ((Select-String -Path $t -Pattern 'europiaProc').Count -ne 2) { throw "look-at null-guard patch failed" }
           # IDRC README: NativeLatentFunction.h needs this one-line patch to compile
           $f = "C:/deps/clib/include/RE/N/NativeLatentFunction.h"
           (Get-Content $f -Raw).Replace('GetRawType<latentR>();','GetRawType<latentR>{}();') | Set-Content $f -NoNewline

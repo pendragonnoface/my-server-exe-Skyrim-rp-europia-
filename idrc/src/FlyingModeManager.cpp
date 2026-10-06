@@ -341,21 +341,9 @@ log::info("{}: FFlyingMode = {}", __FUNCTION__, m_mode);
                 }
     
                 if (a_key == kForward) {
-                    if (m_mode == kLanded && _ts_SKSEFunctions::GetFlyingState(dragonActor) == 0) { // Landed
-                        while (controlsManager.GetIsKeyPressed(a_key)) {
-                            if (!(controlsManager.GetIsKeyPressed(kStrafeLeft) || controlsManager.GetIsKeyPressed(kStrafeRight))) {
-                                RE::NiPoint3 forwardVector{ 0.f, 1.f, 0.f };
-                                float angle = _ts_SKSEFunctions::GetAngleZ(dragonActor->GetPosition() - m_dragonTurnMarker->GetPosition(), forwardVector);
-                                angle = _ts_SKSEFunctions::NormalRelativeAngle(angle - dragonActor->GetAngleZ());
-                                PlaceTravelToMarker(dragonActor, 500.0f, angle, 0.0f);
-                                DragonTravelTo(m_dragonTravelToMarker);
-                            }
-                            std::this_thread::sleep_for(std::chrono::milliseconds(500));
-                        }
-                    } else {
-                        FlyingModeUp(a_key);
-                        flyingModeNotification = true;
-                    }
+                    // Europia: W on the ground takes off (FlyingModeUp handles landed -> take-off, flying -> forward)
+                    FlyingModeUp(a_key);
+                    flyingModeNotification = true;
                 } else if (a_key == kBack) {
                     if ((m_mode == kLanded && _ts_SKSEFunctions::GetFlyingState(dragonActor) == 0) || 
                         (m_mode == kPerching && _ts_SKSEFunctions::GetFlyingState(dragonActor) == 5)) {

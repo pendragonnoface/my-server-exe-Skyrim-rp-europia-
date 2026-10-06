@@ -211,6 +211,46 @@ namespace IDRC::EuropiaBridge {
         return ptr.get();
     }
 
+    namespace {
+        std::chrono::steady_clock::time_point s_lastDiag{}, s_lastLift{};
+        bool s_noProcTold = false;
+
+        float GroundAt(RE::NiPoint3 a_pos) {
+            float h = -1.0e9f;
+            if (auto* tes = RE::TES::GetSingleton()) {
+                if (auto* ws = tes->GetRuntimeData2().worldSpace) {
+                    float out = 0.0f;
+                    if (ws->GetMaxHeightAt(a_pos, out)) h = out;
+                }
+            }
+            return h;
+        }
+
+        // Europia: never let a ridden dragon fly into (or under) the ground. Multiplayer can push him below the terrain.
+        void GroundGuard(std::chrono::steady_clock::time_point a_now) {
+            auto dragon = s_dragon.get();
+            if (!dragon) return;
+            auto* d = dragon.get();
+            bool hasProc = d->GetActorRuntimeData().currentProcess != nullptr;
+            if (!hasProc && !s_noProcTold) { s_noProcTold = true; log::warn("EuropiaBridge: dragon has no AI process (multiplayer unloaded his AI?)"); }
+            if (hasProc) s_noProcTold = false;
+            auto pos = d->GetPosition();
+            float ground = GroundAt(pos);
+            int fs = _ts_SKSEFunctions::GetFlyingState(d);
+            if (a_now - s_lastDiag > std::chrono::seconds(5)) {
+                s_lastDiag = a_now;
+                log::info("EuropiaBridge: dragon z={:.0f} ground={:.0f} flyingState={} process={} ridden={}", pos.z, ground, fs, hasProc, d->IsBeingRidden());
+            }
+            if (ground < -1.0e8f) return;
+            bool airborne = (fs == 1 || fs == 2 || fs == 3);  // taking off, cruising, hovering (not landing/landed/perching)
+            if (airborne && pos.z < ground + 150.0f && a_now - s_lastLift > std::chrono::milliseconds(750)) {
+                s_lastLift = a_now;
+                log::warn("EuropiaBridge: dragon too low (z={:.0f}, ground={:.0f}, state={}) - lifting him clear", pos.z, ground, fs);
+                d->SetPosition(RE::NiPoint3(pos.x, pos.y, ground + 600.0f));
+            }
+        }
+    }
+
     void Update() {
         auto now = std::chrono::steady_clock::now();
         if (now - s_lastTick < std::chrono::milliseconds(250)) return;
@@ -236,5 +276,6 @@ namespace IDRC::EuropiaBridge {
         } else if (s_active && mount.get() != s_dragon.get().get()) {
             End();
         }
+        if (s_active) GroundGuard(now);
     }
 }
