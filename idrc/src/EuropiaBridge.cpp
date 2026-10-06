@@ -11,6 +11,7 @@
 #include "IDRCUtils.h"
 #include "_ts_SKSEFunctions.h"
 #include <chrono>
+#include <atomic>
 
 namespace IDRC::EuropiaBridge {
     namespace {
@@ -202,6 +203,20 @@ namespace IDRC::EuropiaBridge {
         }
     }
 
+    namespace {
+        std::atomic<bool> s_turnBack{ false };
+        std::atomic<float> s_turnBackYaw{ 0.0f };
+        std::atomic<int> s_mouseN{ 0 }, s_mouseSwallowed{ 0 }, s_pathN{ 0 };
+        std::atomic<float> s_pathYaw{ 0.0f }, s_pathPitch{ 0.0f };
+        std::chrono::steady_clock::time_point s_lastCamDiag{};
+    }
+    void SetTurnBack(bool a_on, float a_yaw) { s_turnBackYaw = a_yaw; s_turnBack = a_on; }
+    bool GetTurnBack(float& a_yaw) { a_yaw = s_turnBackYaw; return s_turnBack; }
+    void NoteMouse(bool a_swallowed) { ++s_mouseN; if (a_swallowed) ++s_mouseSwallowed; }
+    namespace { std::atomic<int> s_stage[6]{}; }
+    void NoteStage(int a_stage) { if (a_stage >= 0 && a_stage < 6) ++s_stage[a_stage]; }
+    void NotePath(float a_yaw, float a_pitch) { ++s_pathN; s_pathYaw = a_yaw; s_pathPitch = a_pitch; }
+
     bool IsInUse() { return s_inUse; }
     bool IsActive() { return s_active; }
 
@@ -276,6 +291,27 @@ namespace IDRC::EuropiaBridge {
         } else if (s_active && mount.get() != s_dragon.get().get()) {
             End();
         }
-        if (s_active) GroundGuard(now);
+        if (s_active) {
+            GroundGuard(now);
+            if (now - s_lastCamDiag > std::chrono::seconds(3)) {
+                s_lastCamDiag = now;
+                auto* pc = RE::PlayerCamera::GetSingleton();
+                int camId = (pc && pc->currentState) ? static_cast<int>(pc->currentState->id) : -1;
+                float fx = 0, fy = 0, cy = 0, cp = 0;
+                if (camId == static_cast<int>(RE::CameraState::kDragon)) {
+                    auto* st = static_cast<RE::ThirdPersonState*>(pc->currentState.get());
+                    fx = st->freeRotation.x; fy = st->freeRotation.y;
+                    cy = _ts_SKSEFunctions::GetYaw(st->rotation); cp = _ts_SKSEFunctions::GetPitch(st->rotation);
+                }
+                auto& cl = CameraLockManager::GetSingleton();
+                auto* d = s_dragon.get().get();
+                log::info("EuropiaBridge: cam state={} free=({:.2f},{:.2f}) yaw={:.2f} pitch={:.2f} lockOn={} locked={} mouse={} swallowed={} path={} pathYaw={:.2f} pathPitch={:.2f} mode={} dragonYaw={:.2f} turnBack={} planner=[{},{},{},{},{},{}] flyState={}",
+                    camId, fx, fy, cy, cp, cl.IsEnabled(), cl.IsCameraLocked(), s_mouseN.exchange(0), s_mouseSwallowed.exchange(0),
+                    s_pathN.exchange(0), static_cast<float>(s_pathYaw), static_cast<float>(s_pathPitch),
+                    static_cast<int>(FlyingModeManager::GetSingleton().GetFlyingMode()), d ? d->GetAngleZ() : 0.0f, static_cast<bool>(s_turnBack),
+                    s_stage[0].exchange(0), s_stage[1].exchange(0), s_stage[2].exchange(0), s_stage[3].exchange(0), s_stage[4].exchange(0), s_stage[5].exchange(0),
+                    d ? _ts_SKSEFunctions::GetFlyingState(d) : -1);
+            }
+        }
     }
 }

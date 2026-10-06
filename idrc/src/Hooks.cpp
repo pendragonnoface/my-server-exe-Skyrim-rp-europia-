@@ -337,10 +337,12 @@ log::info("{}: ReadyWeaponHook-ProcessButton called with event IDCode = {}", __F
 		auto& cameraLockManager = IDRC::CameraLockManager::GetSingleton();
 		if (a_event && cameraLockManager.IsCameraLocked())
 		{
+			IDRC::EuropiaBridge::NoteMouse(true);
 			return;
 		}
 		else
 		{
+			IDRC::EuropiaBridge::NoteMouse(false);
 			cameraLockManager.SetUserTurning(true);
 			_ProcessMouseMove(a_this, a_event, a_data);
 		}
@@ -520,6 +522,7 @@ log::info("{}: SetFlightPath called", __FUNCTION__);
 		}
 
 		auto agent = reinterpret_cast<std::byte*>(a_plannerSubPtr - 0x18);  // same offset for SE and AE
+		IDRC::EuropiaBridge::NoteStage(0);
 		UpdateFlightPathData(agent);
 
 		// call the original function
@@ -536,7 +539,7 @@ log::info("{}: SetFlightPath called", __FUNCTION__);
 		if (!IsDragonPathingRequest(a_agent)) {
 			return;
 		}
-
+		IDRC::EuropiaBridge::NoteStage(1);
 
 		auto* dragonActor = IDRC::DataManager::GetSingleton().GetDragonActor();
 		if (!dragonActor) {
@@ -556,6 +559,7 @@ log::info("{}: SetFlightPath called", __FUNCTION__);
 		{
 			return;
 		}
+		IDRC::EuropiaBridge::NoteStage(2);
 
 		auto currentIndex = *reinterpret_cast<uint32_t*>(a_agent + 0x58);
 		auto* pathData = *reinterpret_cast<std::byte**>(a_agent + 0x48);
@@ -573,6 +577,7 @@ log::info("{}: SetFlightPath called", __FUNCTION__);
 		}
 		// If pathData is valid, allow FastTravel
 		IDRC::FastTravelManager::GetSingleton().SkipFastTravelRequest(false);
+		IDRC::EuropiaBridge::NoteStage(3);
 
 		// a_pathData + 0x90 = waypointArray_90 (float* base)
 		// a_pathData + 0xA0 = waypointCount_A0 (uint32)
@@ -583,6 +588,7 @@ log::info("{}: SetFlightPath called", __FUNCTION__);
 log::warn("{}: wayPointBase null=? wayPointCount: {}", __FUNCTION__, wayPointCount);
 			return;
 		}
+		IDRC::EuropiaBridge::NoteStage(4);
 
 		auto* playerCamera = RE::PlayerCamera::GetSingleton();
 		RE::ThirdPersonState* dragonCameraState = nullptr;
@@ -598,6 +604,7 @@ log::warn("{}: wayPointBase null=? wayPointCount: {}", __FUNCTION__, wayPointCou
 			return;
 		}
 
+		IDRC::EuropiaBridge::NoteStage(5);
 		float targetPitch = 0.0f;
 		if(IDRC::CameraLockManager::GetSingleton().IsEnabled() && !flyingModeManager.CheckForHeightChange()) {
 			targetPitch = _ts_SKSEFunctions::GetPitch(dragonCameraState->rotation);
@@ -613,6 +620,16 @@ log::warn("{}: wayPointBase null=? wayPointCount: {}", __FUNCTION__, wayPointCou
 			targetYaw = flyingModeManager.GetTargetYaw();
 			flyingModeManager.SetYawOffset(0.0f);
 		}
+
+		// Europia: outside Skyrim's border, fly level back towards the middle of the map
+		{
+			float europiaYaw = 0.0f;
+			if (IDRC::EuropiaBridge::GetTurnBack(europiaYaw)) {
+				targetYaw = europiaYaw;
+				targetPitch = 0.0f;
+			}
+		}
+		IDRC::EuropiaBridge::NotePath(targetYaw, targetPitch);
 
 		const RE::NiPoint3 dragonPos = dragonActor->GetPosition();
 		auto& combatManager = IDRC::CombatManager::GetSingleton();
@@ -689,7 +706,8 @@ log::warn("{}: wayPointBase null=? wayPointCount: {}", __FUNCTION__, wayPointCou
 			waypointToUpdate.y = dragonPos.y + distanceToUpdate * cosYaw;
 
 			float landZ = _ts_SKSEFunctions::GetLandHeightWithWater(waypointToUpdate, true) + minHeightAboveGround;
-			waypointToUpdate.z = std::max(cameraZ, landZ);
+			// Europia: altitude ceiling ~6000 units (about 85 m) above the ground so he can't climb away forever
+			waypointToUpdate.z = std::min(std::max(cameraZ, landZ), landZ + 6000.0f);
 		}
 /* for debugging
 		log::info("{}: Updated waypoints for flying dragon. CurrentIndex: {}, WaypointCount: {}", __FUNCTION__, currentIndex, wayPointCount);

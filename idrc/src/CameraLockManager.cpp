@@ -160,8 +160,10 @@ namespace IDRC {
         }
 
         if ((combatManager.IsShoutActive() && combatManager.GetShoutTarget()) || 
-            isKeyboardTurn ||
-            (isDragonTurning && !m_isUserTurning && !m_turnOngoing && !isTDMLocked)) {
+            isKeyboardTurn) {
+            // Europia: removed the auto-follow lock (isDragonTurning && !userTurning). Under multiplayer the dragon's
+            // heading changes every frame, which kept the camera locked and swallowed all mouse input.
+            (void)isDragonTurning;
             // camera rotation follows dragon yaw
             m_cameraLocked = true;
 

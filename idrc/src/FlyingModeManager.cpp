@@ -1,3 +1,5 @@
+#include "EuropiaBridge.h"
+#include <chrono>
 #include "FlyingModeManager.h"
 #include "CombatManager.h"
 #include "DataManager.h"
@@ -44,9 +46,24 @@ namespace IDRC {
         if (dragonActor) {
 
             // Border region check
-            if (!IsInBorderRegion()) {
-                DisplayManager::GetSingleton().DisplayLeavingBorderRegion();
-                ForceHover();
+            // Europia: IDRC re-issued ForceHover every frame outside the border region, which failed under
+            // multiplayer and left the player with no control while the dragon flew off the map forever.
+            // Instead, steer the dragon back towards the middle of the worldspace and keep the controls working.
+            {
+                static auto s_lastBorderMsg = std::chrono::steady_clock::time_point{};
+                bool outside = !IsInBorderRegion();
+                if (outside) {
+                    float yaw = GetAngleToCoordinate(GetWorldSpaceCenterX(), GetWorldSpaceCenterY());
+                    IDRC::EuropiaBridge::SetTurnBack(true, yaw);
+                    auto nowB = std::chrono::steady_clock::now();
+                    if (nowB - s_lastBorderMsg > std::chrono::seconds(5)) {
+                        s_lastBorderMsg = nowB;
+                        RE::SendHUDMessage::ShowHUDMessage("Edge of Skyrim - turning back");
+                        log::warn("EuropiaBridge: outside border region - steering back to the world centre (yaw {:.2f})", yaw);
+                    }
+                } else {
+                    IDRC::EuropiaBridge::SetTurnBack(false, 0.0f);
+                }
             }
 /*
 if (this->m_noFlyAbility) {
@@ -333,7 +350,7 @@ log::info("{}: FFlyingMode = {}", __FUNCTION__, m_mode);
         }
     
         bool flyingModeNotification = false;
-        if (!controlsManager.GetControlBlocked() && IsInBorderRegion()) {
+        if (!controlsManager.GetControlBlocked()) {  // Europia: keys keep working outside the border (turn-back steers)
             if (dragonActor->IsBeingRidden()) {
                 if ((a_key == kForward || a_key == kBack) && 
                         dataManager.GetAutoCombat() && _ts_SKSEFunctions::GetCombatState(dragonActor) > 0) {
