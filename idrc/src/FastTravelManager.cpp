@@ -143,7 +143,14 @@ namespace IDRC {
 */
 // Previous solution: call the Papyrus function Game.FastTravel(). 
 // This works as well and is an alternative to setting the loc values.
-            _ts_SKSEFunctions::CallPapyrusFunction("Game"sv, "FastTravel"sv, a_fastTravelTarget);
+            // Europia: the multiplayer client calls Game.EnableFastTravel(false) every frame, which made IDRC's
+            // in-flight steering (dragon fly-to via Game.FastTravel) silently do nothing. Re-enable it right before.
+            bool europiaEn = _ts_SKSEFunctions::CallPapyrusFunction("Game"sv, "EnableFastTravel"sv, true);
+            bool europiaFt = _ts_SKSEFunctions::CallPapyrusFunction("Game"sv, "FastTravel"sv, a_fastTravelTarget);
+            static int europiaN = 0;
+            if ((europiaN++ % 40) == 0) {
+                log::info("EuropiaBridge: steering fly-to dispatched (enable={}, fastTravel={}) count={}", europiaEn, europiaFt, europiaN);
+            }
 
             // trigger fasttravel package
             dragonActor->AsActorValueOwner()->SetActorValue(RE::ActorValue::kVariable03, 2);
