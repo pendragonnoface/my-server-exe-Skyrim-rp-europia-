@@ -1,0 +1,79 @@
+name: Build IDRC (Europia bridge)
+on:
+  push:
+    branches: [main]
+    paths: ['idrc/**', '.github/workflows/build-idrc.yml']
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: build-idrc
+  cancel-in-progress: true
+jobs:
+  build:
+    runs-on: windows-2022
+    env:
+      CommonLibSSEPath_NG: C:/deps/clib
+      CLibUtilsPath: C:/deps/clibutil
+      VCPKG_DEFAULT_BINARY_CACHE: C:/vcpkg-bincache
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch dependencies (pinned)
+        shell: pwsh
+        run: |
+          git clone https://github.com/alandtse/CommonLibSSE-NG C:/deps/clib
+          git -C C:/deps/clib checkout 3c0f5a87c3b166c9a6712d5c3bd180e9ac5ad0fd
+          git -C C:/deps/clib submodule update --init --recursive
+          git clone https://github.com/powerof3/CLibUtil C:/deps/clibutil
+          git -C C:/deps/clibutil checkout 5f845f38089c7ee92f01c000de420570b8cfee0c
+          git clone https://github.com/staalo18/TS_SKSEFunctions "$env:GITHUB_WORKSPACE/TS_SKSEFunctions-main"
+          git -C "$env:GITHUB_WORKSPACE/TS_SKSEFunctions-main" checkout 1391a1c481baa9e11e0380b7a846f7a42eea0a07
+          # IDRC README: NativeLatentFunction.h needs this one-line patch to compile
+          $f = "C:/deps/clib/include/RE/N/NativeLatentFunction.h"
+          (Get-Content $f -Raw).Replace('GetRawType<latentR>();','GetRawType<latentR>{}();') | Set-Content $f -NoNewline
+          Select-String -Path $f -Pattern 'GetRawType'
+          New-Item -ItemType Directory -Force C:/vcpkg-bincache | Out-Null
+          "VCPKG_ROOT=$env:VCPKG_INSTALLATION_ROOT" >> $env:GITHUB_ENV
+      - name: Cache vcpkg packages
+        uses: actions/cache@v4
+        with:
+          path: C:/vcpkg-bincache
+          key: vcpkg-${{ hashFiles('idrc/vcpkg.json', 'idrc/vcpkg-configuration.json') }}-v1
+      - uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+      - name: Ninja
+        shell: pwsh
+        run: |
+          if (-not (Get-Command ninja -ErrorAction SilentlyContinue)) { choco install ninja -y }
+          ninja --version
+      - name: Configure
+        shell: pwsh
+        working-directory: idrc
+        run: cmake --preset release
+      - name: Build
+        shell: pwsh
+        working-directory: idrc
+        run: cmake --build build/release --config Release
+      - name: Collect output
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force dist | Out-Null
+          Get-ChildItem -Recurse idrc/build/release -Include IntuitiveDragonRideControl.dll,IntuitiveDragonRideControl.pdb | Copy-Item -Destination dist -Force
+          Get-ChildItem dist
+          "commit=$env:GITHUB_SHA" | Set-Content dist/BUILD-INFO.txt
+          (Get-Date -Format o) | Add-Content dist/BUILD-INFO.txt
+          (Get-FileHash dist/IntuitiveDragonRideControl.dll -Algorithm SHA256).Hash | Add-Content dist/BUILD-INFO.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: IntuitiveDragonRideControl-europia
+          path: dist
+      - name: Commit DLL back to repo
+        shell: pwsh
+        run: |
+          git config user.name "europia-build"
+          git config user.email "actions@users.noreply.github.com"
+          git add dist
+          git commit -m "Build IDRC Europia DLL [skip ci]"
+          git pull --rebase
+          git push
